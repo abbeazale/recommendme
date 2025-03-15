@@ -84,8 +84,12 @@ for field in text_fields:
 vectorizers = {}
 for field in text_fields:
     if field in df.columns:
-        # Create a TF-IDF vectorizer
-        vectorizer = TfidfVectorizer(max_features=10)  # Limit to 10 features per field
+        # For genres - more features or one-hot encoding
+        if field == 'track_genre':
+            vectorizer = TfidfVectorizer(max_features=20)
+        else:
+            # For artists/tracks/albums - keep sparse
+            vectorizer = TfidfVectorizer(max_features=10)
         vectorizers[field] = vectorizer
         
         # Fit and transform the text data
