@@ -5,7 +5,7 @@ import csv
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 # Load the dataset
-df = pd.read_csv('artistarr.csv')
+df = pd.read_csv('songsdata.csv')
 
 # Remove the first row if it's a header row that was duplicated
 # If the first row is actually data row with index 0, skip this step
@@ -75,7 +75,7 @@ df['artists_array'] = df['artists'].apply(convert_to_postgres_array)
 
 # VECTORIZE TEXT FIELDS
 # First, ensure text fields are strings
-text_fields = ['artists', 'album_name', 'track_name']
+text_fields = ['artists', 'album_name', 'track_name', 'track_genre']
 for field in text_fields:
     if field in df.columns:
         df[field] = df[field].fillna('').astype(str)
@@ -97,12 +97,14 @@ for field in text_fields:
         # Store the vectors in a new column
         df[f'{field}_vector'] = vectors_as_lists
 
-#delet the artists column
+# Delete the artists column
 df.drop(columns=['artists'], inplace=True)
+
 # Rename 'artists_array' to 'artists'
 df.rename(columns={'artists_array': 'artists'}, inplace=True)
-#delete unnamed column
-# Optionally, drop the original columns if no longer needed
-df.drop(columns=['Unnamed: 0'], inplace=True)
+
+# Check if 'Unnamed: 0' exists before trying to drop it
+if 'Unnamed: 0' in df.columns:
+    df.drop(columns=['Unnamed: 0'], inplace=True)
 
 df.to_csv('artistarrayfinal.csv', index=False) 
