@@ -1,7 +1,7 @@
 import pandas as pd
 
 # Load the original CSV file
-df = pd.read_csv('artistarrayfinal.csv')
+df = pd.read_csv('cleaned_for_import.csv')
 # Define the number of rows per file
 rows_per_file = 25000
 

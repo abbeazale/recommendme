@@ -17,15 +17,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load your model and PCA
+# Load the sentence transformer model
 model = SentenceTransformer("all-MiniLM-L6-v2")
-pca = joblib.load(os.path.join("..", "scripts", "pca_model.pkl"))
 
 class QueryInput(BaseModel):
     text: str
 
 @app.post("/embed")
 async def embed_query(data: QueryInput):
+    # Generate embedding directly without PCA reduction
     embedding = model.encode(data.text)
-    reduced = pca.transform([embedding])
-    return {"vector": reduced[0].tolist()}
+    return {"vector": embedding.tolist()}
