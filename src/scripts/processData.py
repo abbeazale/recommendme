@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, normalize
 from sklearn.decomposition import PCA
 from sentence_transformers import SentenceTransformer
-from collections import Counter
 import logging
+import joblib
+import json
+
 logging.basicConfig(level=logging.DEBUG)
 
 # Load the dataset
@@ -53,13 +55,23 @@ df['artists'] = df['artists'].apply(convert_artists_to_array)
 # Load pre-trained embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
+# Consistent text embedding function for all text fields
+def get_text_embedding(text):
+    try:
+        if pd.isna(text) or not isinstance(text, str) or not text.strip():
+            return [0.0] * 384  # Same dimensionality as the model output
+        return model.encode(str(text)).tolist()
+    except Exception as e:
+        logging.error(f"Error encoding text '{text}': {e}")
+        return [0.0] * 384
+
 # Safe encoding for artists
 def safe_encode(artist_list):
     try:
         text = ' '.join([str(a) for a in artist_list if a])
         return model.encode(text).tolist() if text else [0.0] * 384
     except Exception as e:
-        print(f"Error encoding {artist_list}: {e}")
+        logging.error(f"Error encoding {artist_list}: {e}")
         return [0.0] * 384
 
 df['artists_vector'] = df['artists'].apply(
@@ -70,32 +82,13 @@ df['artists_vector'] = df['artists'].apply(
 )
 
 # Safe encoding for track_genre
-def safe_genre_encode(genre):
-    try:
-        return model.encode(str(genre)).tolist() if pd.notna(genre) and str(genre).strip() else [0.0] * 384
-    except Exception as e:
-        print(f"Error encoding genre {genre}: {e}")
-        return [0.0] * 384
+df['track_genre_vector'] = df['track_genre'].apply(get_text_embedding)
 
-df['track_genre_vector'] = df['track_genre'].apply(safe_genre_encode)
+# Replace one-hot encoding with semantic embeddings for album and track names
+df['album_name_vector'] = df['album_name'].apply(get_text_embedding)
+df['track_name_vector'] = df['track_name'].apply(get_text_embedding)
 
-# One-hot encoding for album_name and track_name
-def text_to_embedding(text, all_values, max_values=10):
-    if pd.isna(text) or not isinstance(text, str):
-        return [0.0] * max_values
-    embedding = [0.0] * max_values
-    if text in all_values:
-        idx = all_values.index(text)
-        if idx < max_values:
-            embedding[idx] = 1.0
-    return embedding
-
-top_albums = [a for a, _ in Counter(df['album_name'].fillna('')).most_common(10)]
-top_tracks = [a for a, _ in Counter(df['track_name'].fillna('')).most_common(10)]
-df['album_name_vector'] = df['album_name'].apply(lambda x: text_to_embedding(x, top_albums))
-df['track_name_vector'] = df['track_name'].apply(lambda x: text_to_embedding(x, top_tracks))
-
-# Define weights for numeric features
+# Define weights for all features
 weights = {
     'danceability_norm': 2.0,
     'energy_norm': 2.0,
@@ -104,16 +97,41 @@ weights = {
     'acousticness_norm': 2.0,
     'instrumentalness_norm': 1.0,
     'liveness_norm': 1.0,
-    'valence_norm': 2.0,  # Increased to match your update
+    'valence_norm': 2.0,
     'tempo_norm': 1.5,
     'duration_ms_norm': 0.5,
     'explicit_norm': 0.5,
     'popularity_norm': 0.5,
     'artists_vector': 2.0,  
-    'track_genre_vector': 2.0 
+    'track_genre_vector': 2.0,
+    'album_name_vector': 1.0,  
+    'track_name_vector': 1.0 
 }
 
-# Create the features array
+# Apply PCA to each text embedding type separately to reduce dimensionality
+def reduce_embedding(vectors, n_components=20):
+    if len(vectors) <= n_components:
+        # If fewer samples than components, pad with zeros
+        return [v[:n_components] + [0.0] * (n_components - len(v[:n_components])) for v in vectors]
+    matrix = np.vstack(vectors)
+    pca = PCA(n_components=n_components)
+    reduced = pca.fit_transform(matrix)
+    return [row.tolist() for row in reduced]
+
+# Reduce dimensionality of text embeddings before combining
+reduced_artists = reduce_embedding(df['artists_vector'].tolist())
+df['artists_vector_reduced'] = reduced_artists
+
+reduced_genres = reduce_embedding(df['track_genre_vector'].tolist())
+df['track_genre_vector_reduced'] = reduced_genres
+
+reduced_albums = reduce_embedding(df['album_name_vector'].tolist())
+df['album_name_vector_reduced'] = reduced_albums
+
+reduced_tracks = reduce_embedding(df['track_name_vector'].tolist())
+df['track_name_vector_reduced'] = reduced_tracks
+
+# Create the features array with reduced embeddings
 df['features'] = df.apply(lambda row: 
     [
         float(row['danceability_norm']) * weights['danceability_norm'],
@@ -129,30 +147,32 @@ df['features'] = df.apply(lambda row:
         float(row['explicit_norm']) * weights['explicit_norm'],
         float(row['popularity_norm']) * weights['popularity_norm'],
     ] + 
-    [x * weights['artists_vector'] for x in row['artists_vector'][:20]] +  # Weighted artist embedding
-    [x * weights['track_genre_vector'] for x in row['track_genre_vector'][:20]] +  # Weighted genre embedding
-    [float(x) for x in row['album_name_vector']] +
-    [float(x) for x in row['track_name_vector']],
+    [x * weights['artists_vector'] for x in row['artists_vector_reduced']] +
+    [x * weights['track_genre_vector'] for x in row['track_genre_vector_reduced']] +
+    [x * weights['album_name_vector'] for x in row['album_name_vector_reduced']] +
+    [x * weights['track_name_vector'] for x in row['track_name_vector_reduced']],
     axis=1
 )
 
 # Convert features to numpy array
-df['features'] = df['features'].apply(lambda x: np.array(x, dtype=float))
-
-#use PCA to reduce dimentions
 feature_matrix = np.vstack(df['features'].values)
-pca = PCA(n_components=30) #reduce to 30 dimensions
+
+# Final PCA to reduce dimensions
+pca = PCA(n_components=30)
 reduced_features = pca.fit_transform(feature_matrix)
-df['features'] = [row.tolist() for row in reduced_features]
+joblib.dump(pca, 'pca_model.pkl')
+
+# Normalize the final vectors for cosine similarity
+normalized_features = normalize(reduced_features, norm='l2', axis=1)
+df['features'] = [row.tolist() for row in normalized_features]
 
 # Print explained variance to assess information retention
 explained_variance_ratio = pca.explained_variance_ratio_.sum()
 print(f"Explained variance ratio with 30 components: {explained_variance_ratio:.4f}")
 
-
 # Verify feature vector length
 vector_length = len(df['features'].iloc[0])
-print(f"Feature vector length: {vector_length}")  # Should be 12 + 20 + 20 + 10 + 10 = 72
+print(f"Feature vector length: {vector_length}")  # Should be 30
 
 # Clean up and organize columns
 columns_to_keep = ['id', 'album_name', 'track_name', 'artists', 'track_genre', 
@@ -160,8 +180,8 @@ columns_to_keep = ['id', 'album_name', 'track_name', 'artists', 'track_genre',
 columns_to_keep = [col for col in columns_to_keep if col in df.columns]
 df = df[columns_to_keep]
 
-# Convert artists back to string representation for storage
-df['artists'] = df['artists'].apply(lambda x: '[' + ','.join([f'"{a}"' for a in x]) + ']')
+# Convert artists to proper JSON strings
+df['artists'] = df['artists'].apply(json.dumps)
 
 # Save the final dataset
 df.to_csv('processed_songs_for_pgvector.csv', index=False)

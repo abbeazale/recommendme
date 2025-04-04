@@ -1,6 +1,9 @@
 import Image from "next/image";
 import { Geist, Geist_Mono } from "next/font/google";
-import {supabase} from "@/backend/supabase";
+import { supabase } from "@/backend/supabase";
+import { useState } from "react";
+import { getEmbedding } from '@/utils/api';
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -12,108 +15,134 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export default function Home() {
-  console.log()
+// Define an interface for song data
+interface Song {
+  id: string;
+  track_name: string;
+  artists?: string;
+  album_name?: string;
+}
 
-  console.log(supabase, "Supabase client");
+export default function Home() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [results, setResults] = useState<Song[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!searchTerm.trim()) return;
+    
+    setIsLoading(true);
+    setError("");
+    
+    try {
+      // 1. Get embedding vector from your Python API
+      const vector = await getEmbedding(searchTerm);
+      
+      // 2. Use the vector to query your API endpoint
+      const response = await fetch('/api/recommend', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: searchTerm,
+          filters: {
+            limit: 10,
+          }
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Recommendation API error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      setResults(data.results.map((item: any) => item.song));
+      
+    } catch (err) {
+      console.error("Search error:", err);
+      setError("Failed to fetch recommendations. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div
-      className={`${geistSans.variable} ${geistMono.variable} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
+      className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-gradient-to-b from-gray-900 to-black text-white`}
     >
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              pages/index.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+      <div className="container mx-auto px-4 py-16">
+        <header className="text-center mb-16">
+          <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
+            SoundSync
+          </h1>
+          <p className="text-xl text-gray-300">
+            Discover your next favorite song with our AI-powered recommendations
+          </p>
+        </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+        <div className="max-w-3xl mx-auto mb-16">
+          <form onSubmit={handleSearch} className="relative">
+            <input
+              type="text"
+              placeholder="Search by song, artist, or album..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full px-5 py-4 text-lg bg-gray-800 rounded-full border border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white"
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <button 
+              type="submit"
+              disabled={isLoading}
+              className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-gradient-to-r from-purple-500 to-pink-600 text-white p-3 rounded-full hover:opacity-90 transition"
+            >
+              {isLoading ? (
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              )}
+            </button>
+          </form>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {error && (
+          <div className="text-red-400 text-center mb-8">
+            {error}
+          </div>
+        )}
+
+        {results.length > 0 && (
+          <div className="bg-gray-800 rounded-xl p-6 max-w-4xl mx-auto">
+            <h2 className="text-2xl font-bold mb-6 text-purple-300">Recommended Songs</h2>
+            <ul className="space-y-4">
+              {results.map((song) => (
+                <li key={song.id} className="border-b border-gray-700 pb-4 last:border-0">
+                  <div className="flex items-center">
+                    <div className="w-12 h-12 bg-gray-700 rounded flex-shrink-0 flex items-center justify-center text-purple-300">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                      </svg>
+                    </div>
+                    <div className="ml-4">
+                      <h3 className="font-bold text-white">{song.track_name}</h3>
+                      <p className="text-gray-400">{song.artists?.replace(/[\[\]"]/g, '')}</p>
+                      <p className="text-gray-500 text-sm">{song.album_name}</p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <footer className="text-center mt-20 text-gray-500 text-sm">
+          <p>&copy; {new Date().getFullYear()} SoundSync. All rights reserved.</p>
+        </footer>
+      </div>
     </div>
   );
 }
