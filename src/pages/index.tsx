@@ -77,7 +77,7 @@ export default function Home() {
       <div className="container mx-auto px-4 py-16">
         <header className="text-center mb-16">
           <h1 className="text-5xl md:text-6xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-600">
-            SoundSync
+            Reccomend Me
           </h1>
           <p className="text-xl text-gray-300">
             Discover your next favorite song with our AI-powered recommendations
@@ -140,7 +140,7 @@ export default function Home() {
         )}
 
         <footer className="text-center mt-20 text-gray-500 text-sm">
-          <p>&copy; {new Date().getFullYear()} SoundSync. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Reccomend Me. All rights reserved.</p>
         </footer>
       </div>
     </div>
