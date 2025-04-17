@@ -1,8 +1,8 @@
 // pages/api/recommend.ts
 import { NextApiRequest, NextApiResponse } from 'next';
 import { createClient } from '@supabase/supabase-js';
-import { generateSQLQuery } from '@/utils/textToSql';
-import { Song, RecommendQueryParams, RecommendResponse } from '../../types/recommend';
+import { generateSQLQuery } from '@/utils/textToSQL';
+import { RecommendQueryParams } from '../../types/recommend';
 
 interface FrontendSong {
   id: string;

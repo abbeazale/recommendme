@@ -33,7 +33,7 @@ LIMIT 10;
 The user query is: "${nlQuery}"
 
 Important:
-1. Replace 'Artist' with the artist name mentioned in the query.
+1. Replace 'Artist' with the artist name mentioned in the query. Use capital letters for the first letter of the artist name.
 2. Keep the SET ivfflat.probes = 10; line exactly as shown.
 3. If no artist is mentioned, try to understand what the user is looking for (genre, mood, etc.) and modify the inner query accordingly.
 4. For genre-based queries, use: WHERE track_genre ILIKE '%genre%'
@@ -80,14 +80,14 @@ LIMIT 10;`;
     // Fallback in case the cleaning results in an empty query
     if (!generatedSQL) {
       generatedSQL = `SET ivfflat.probes = 10;
-SELECT id, track_name, artists, track_genre, features <-> (
-    SELECT AVG(features) 
-    FROM songs 
-    WHERE 'Artist' = ANY(artists)
-) AS similarity
-FROM songs
-ORDER BY similarity
-LIMIT 10;`;
+        SELECT id, track_name, artists, track_genre, features <-> (
+            SELECT AVG(features) 
+            FROM songs 
+            WHERE 'Artist' = ANY(artists)
+        ) AS similarity
+        FROM songs
+        ORDER BY similarity
+        LIMIT 10;`;
     }
     
     return generatedSQL;

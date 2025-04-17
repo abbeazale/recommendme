@@ -27,4 +27,5 @@ class QueryInput(BaseModel):
 async def embed_query(data: QueryInput):
     # Generate embedding directly without PCA reduction
     embedding = model.encode(data.text)
+    print(embedding)
     return {"vector": embedding.tolist()}
